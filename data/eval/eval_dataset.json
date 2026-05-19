@@ -1,0 +1,102 @@
+[
+  {
+    "question": "What is the difference between BERT and DistilBERT in terms of size and performance?",
+    "ground_truth": "DistilBERT is a smaller, faster version of BERT that retains 97% of BERT's language understanding capabilities while being 40% smaller and 60% faster. It is distilled from BERT using knowledge distillation during the pre-training phase."
+  },
+  {
+    "question": "What does the n_estimators parameter do in RandomForestClassifier?",
+    "ground_truth": "The n_estimators parameter controls the number of trees in the forest. More trees generally improve performance but increase computation time. The default value is 100."
+  },
+  {
+    "question": "Which HuggingFace models are recommended for text classification tasks?",
+    "ground_truth": "Popular models for text classification include BERT, RoBERTa, DistilBERT, and DeBERTa. These transformer models can be fine-tuned on classification datasets and are available on the HuggingFace model hub."
+  },
+  {
+    "question": "What are the known limitations of GPT-2?",
+    "ground_truth": "GPT-2 can generate plausible-sounding but factually incorrect text, may produce biased content reflecting its training data, lacks factual grounding, and can be misused for generating misinformation. It does not have access to real-time information."
+  },
+  {
+    "question": "How does the SVM kernel trick work?",
+    "ground_truth": "The kernel trick allows SVMs to operate in a high-dimensional feature space without explicitly computing the coordinates in that space. Common kernels include RBF, polynomial, and linear. The kernel function computes the inner product of two vectors in the transformed feature space."
+  },
+  {
+    "question": "What is the max_depth parameter in DecisionTreeClassifier and how does it affect overfitting?",
+    "ground_truth": "The max_depth parameter limits the maximum depth of the decision tree. Deeper trees can capture more complex patterns but are prone to overfitting. Setting max_depth to None allows the tree to grow until all leaves are pure or contain fewer than min_samples_split samples."
+  },
+  {
+    "question": "What dataset was RoBERTa trained on?",
+    "ground_truth": "RoBERTa was trained on a much larger dataset than BERT, including BookCorpus, English Wikipedia, CC-News, OpenWebText, and Stories datasets, totaling over 160GB of text."
+  },
+  {
+    "question": "What is the difference between RandomForest and GradientBoosting in sklearn?",
+    "ground_truth": "RandomForest builds trees in parallel using bagging (bootstrap aggregation) while GradientBoosting builds trees sequentially, each correcting the errors of the previous. RandomForest is faster to train and less prone to overfitting, while GradientBoosting often achieves higher accuracy."
+  },
+  {
+    "question": "What preprocessing steps does sklearn's StandardScaler perform?",
+    "ground_truth": "StandardScaler standardizes features by removing the mean and scaling to unit variance. It computes the mean and standard deviation on the training set and applies the same transformation to test data. It is sensitive to outliers."
+  },
+  {
+    "question": "What evaluation metrics are available in sklearn for classification?",
+    "ground_truth": "Sklearn provides accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, classification_report, and average_precision_score among others in the sklearn.metrics module."
+  },
+  {
+    "question": "What is the purpose of the C parameter in SVM?",
+    "ground_truth": "The C parameter in SVM controls the regularization strength. A smaller C creates a wider margin with more misclassifications (soft margin), while a larger C enforces stricter classification with a narrower margin. High C can lead to overfitting."
+  },
+  {
+    "question": "What is the context window size of BERT base?",
+    "ground_truth": "BERT base has a maximum sequence length of 512 tokens. Input sequences longer than this must be truncated or handled with sliding window approaches."
+  },
+  {
+    "question": "What is the learning_rate parameter in GradientBoostingClassifier?",
+    "ground_truth": "The learning_rate parameter (also called shrinkage) scales the contribution of each tree. Lower values require more trees (n_estimators) but often result in better generalization. There is a trade-off between learning_rate and n_estimators."
+  },
+  {
+    "question": "What are the main clustering algorithms available in scikit-learn?",
+    "ground_truth": "Scikit-learn provides KMeans, DBSCAN, AgglomerativeClustering, SpectralClustering, MeanShift, OPTICS, Birch, and GaussianMixture among others. Each has different assumptions about cluster shape and density."
+  },
+  {
+    "question": "What is the difference between micro and macro averaging in sklearn classification metrics?",
+    "ground_truth": "Macro averaging calculates the metric independently for each class and then takes the average, treating all classes equally. Micro averaging aggregates contributions from all classes before calculating the metric, giving more weight to frequent classes."
+  },
+  {
+    "question": "What is DistilBERT's architecture compared to BERT?",
+    "ground_truth": "DistilBERT has 6 transformer layers compared to BERT base's 12 layers, 66M parameters vs 110M, and uses knowledge distillation from BERT. It removes the token type embeddings and pooler, retaining the same hidden size of 768."
+  },
+  {
+    "question": "What is min_samples_split in a decision tree?",
+    "ground_truth": "min_samples_split is the minimum number of samples required to split an internal node. Higher values prevent creating splits with very few samples, acting as a regularization parameter to reduce overfitting. Default is 2."
+  },
+  {
+    "question": "What cross-validation strategies does sklearn support?",
+    "ground_truth": "Sklearn supports KFold, StratifiedKFold, LeaveOneOut, LeavePOut, ShuffleSplit, StratifiedShuffleSplit, GroupKFold, and TimeSeriesSplit through the model_selection module. cross_val_score and cross_validate functions simplify usage."
+  },
+  {
+    "question": "What is the eps parameter in DBSCAN?",
+    "ground_truth": "The eps parameter in DBSCAN defines the maximum distance between two samples to be considered neighbors. Points within eps distance of each other are considered in the same neighborhood. Choosing eps is critical — too small and most points become noise, too large and clusters merge."
+  },
+  {
+    "question": "How does multilabel classification work in scikit-learn?",
+    "ground_truth": "Sklearn supports multilabel classification where each sample can have multiple labels. Classifiers like MLPClassifier, RandomForest, and LinearSVC support this natively. The target y is a 2D binary indicator matrix. Metrics like hamming_loss and jaccard_score are used for evaluation."
+  },
+  {
+    "question": "What activation functions does sklearn's MLPClassifier support?",
+    "ground_truth": "MLPClassifier supports relu, tanh, logistic (sigmoid), and identity activation functions via the activation parameter. The default is relu. The output layer uses softmax for multi-class or logistic for binary classification."
+  },
+  {
+    "question": "What is warm_start in sklearn estimators?",
+    "ground_truth": "The warm_start parameter, when set to True, reuses the solution from the previous call to fit as initialization for the next fit. This is useful for incrementally training a model or fitting additional estimators to an existing ensemble."
+  },
+  {
+    "question": "What tokenizer does BERT use?",
+    "ground_truth": "BERT uses WordPiece tokenization, which breaks words into subword units. It uses special tokens [CLS] at the beginning and [SEP] to separate sentences. The vocabulary size is 30,522 tokens for BERT base uncased."
+  },
+  {
+    "question": "What is the difference between fit and fit_transform in sklearn?",
+    "ground_truth": "fit() computes the parameters (e.g. mean and std for StandardScaler) from the data. transform() applies the transformation using already-computed parameters. fit_transform() does both in one step and is more efficient. fit_transform should only be used on training data."
+  },
+  {
+    "question": "What is the purpose of class_weight parameter in sklearn classifiers?",
+    "ground_truth": "The class_weight parameter allows penalizing misclassifications of minority classes more heavily. Setting class_weight='balanced' automatically adjusts weights inversely proportional to class frequencies. This is useful for imbalanced datasets."
+  }
+]

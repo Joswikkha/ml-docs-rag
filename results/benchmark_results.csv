@@ -1,0 +1,4 @@
+strategy,faithfulness,answer_relevancy,context_recall,context_precision,questions_scored
+Dense (baseline),0.1387,0.1317,0.0632,0.0511,10
+Hybrid BM25+Dense,0.1224,0.1046,0.0485,0.0516,10
+Hybrid + Reranking,0.1157,0.0805,0.0682,0.063,10

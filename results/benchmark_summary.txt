@@ -1,0 +1,18 @@
+=================================================================
+RAGAS-style Benchmark Results (Local Scoring)
+Date     : 2026-05-19 15:03
+Questions: 10 per strategy
+=================================================================
+
+Strategy                     Faith   Relev  Recall    Prec    Q
+-----------------------------------------------------------------
+Dense (baseline)            0.1387  0.1317  0.0632  0.0511   10
+Hybrid BM25+Dense           0.1224  0.1046  0.0485  0.0516   10
+Hybrid + Reranking          0.1157  0.0805  0.0682  0.0630   10
+
+=================================================================
+Winner  : Dense (baseline)
+Faithfulness vs baseline: +0.0%
+=================================================================
+
+Note: Scored with local keyword overlap (no OpenAI needed)
