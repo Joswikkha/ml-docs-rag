@@ -1,13 +1,11 @@
 import streamlit as st
 import sys, os
-from dotenv import load_dotenv
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Fix the src import path
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
-load_dotenv(os.path.join(ROOT, ".env"))
 
-from src.rag_chain import build_rag_chain
-from src.retrievers import get_dense_retriever, get_hybrid_retriever, get_hybrid_rerank_retriever
+from src.rag_chain import get_rag_chain
 
 st.set_page_config(page_title="Q&A Interface", page_icon="💬", layout="wide")
 st.title("💬 Ask the ML Documentation")
@@ -31,15 +29,16 @@ with st.sidebar:
     if st.button("Clear history"):
         st.session_state.history = []
 
+strategy_map = {
+    "Strategy 3 — Hybrid + Rerank (Best)": 3,
+    "Strategy 2 — Hybrid BM25 + Dense":    2,
+    "Strategy 1 — Dense (Baseline)":       1,
+}
+strategy_num = strategy_map[strategy]
+
 @st.cache_resource
-def load_chain(strategy_name):
-    if "Rerank" in strategy_name:
-        retriever = get_hybrid_rerank_retriever()
-    elif "Hybrid" in strategy_name:
-        retriever = get_hybrid_retriever()
-    else:
-        retriever = get_dense_retriever()
-    return build_rag_chain(retriever=retriever)
+def load_chain(num):
+    return get_rag_chain(strategy=num)
 
 query = st.text_input(
     "Your question",
@@ -48,8 +47,8 @@ query = st.text_input(
 ask = st.button("Ask", type="primary")
 
 if ask and query:
+    chain = load_chain(strategy_num)
     with st.spinner(f"Retrieving with {strategy}..."):
-        chain = load_chain(strategy)
         result = chain.invoke({"query": query})
 
     answer  = result.get("result", str(result))
