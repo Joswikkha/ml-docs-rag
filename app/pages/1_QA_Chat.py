@@ -1,13 +1,19 @@
 import streamlit as st
-import sys, os
+import sys
+import os
 from dotenv import load_dotenv
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, ROOT)
+
 load_dotenv(os.path.join(ROOT, ".env"))
 
 from src.rag_chain import build_rag_chain
-from src.retrievers import get_dense_retriever, get_hybrid_retriever, get_hybrid_rerank_retriever
+from src.retrievers import (
+    get_dense_retriever,
+    get_hybrid_retriever,
+    get_hybrid_rerank_retriever
+)
 
 st.set_page_config(page_title="Q&A Interface", page_icon="💬", layout="wide")
 st.title("💬 Ask the ML Documentation")
@@ -69,7 +75,9 @@ if ask and query:
         for i, doc in enumerate(sources):
             src = doc.metadata.get("source", "unknown")
             with st.expander(f"Chunk {i+1} · {src[:60]}"):
-                st.write(doc.page_content[:400] + "...")
+                 st.link_button("🔗 Open Source", src)
+                 st.markdown( f"<div style='font-size:14px; line-height:1.6'>{doc.page_content[:400]}...</div>",unsafe_allow_html=True)
+                
 
 elif ask and not query:
     st.warning("Please type a question first.")
