@@ -142,10 +142,16 @@ def render_sources(sources):
         return
     with st.expander(f"📚 Source chunks ({len(sources)})"):
         for i, doc in enumerate(sources):
-            src = doc.metadata.get("source", "unknown")
+            # metadata.get() only falls back to "unknown" when the key is
+            # MISSING — if the key exists but is explicitly None, .get()
+            # still returns None, and slicing None (src[:70]) crashes with
+            # "TypeError: 'NoneType' object is not subscriptable". The `or`
+            # below catches both cases.
+            src = doc.metadata.get("source") or "unknown"
+            src = str(src)
             st.markdown(f"**Chunk {i+1}** · `{src[:70]}`")
-            if src and src != "unknown":
-                st.link_button("🔗 Open source", src, key=f"src_{id(doc)}_{i}")
+            if src.startswith("http://") or src.startswith("https://"):
+                st.link_button("🔗 Open source", src, key=f"src_{i}_{hash(src)}")
             st.markdown(
                 f"<div style='font-size:14px; line-height:1.6'>"
                 f"{doc.page_content[:400]}...</div>",
