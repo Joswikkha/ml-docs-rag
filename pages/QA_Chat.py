@@ -151,7 +151,7 @@ def render_sources(sources):
             src = str(src)
             st.markdown(f"**Chunk {i+1}** · `{src[:70]}`")
             if src.startswith("http://") or src.startswith("https://"):
-                st.link_button("🔗 Open source", src)
+                st.link_button("🔗 Open source", src, key=f"src_{i}_{hash(src)}")
             st.markdown(
                 f"<div style='font-size:14px; line-height:1.6'>"
                 f"{doc.page_content[:400]}...</div>",

@@ -1,6 +1,6 @@
 """
 rag_chain.py — Phase 2c: LangChain QA Chain using FREE Groq LLM
-Uses Groq's free API with Llama 3.1 70B — fast, free, excellent quality.
+Uses Groq's free API with GPT-OSS 120B — fast, free, excellent quality.
 
 Usage:
     from rag_chain import build_rag_chain, ask
@@ -47,7 +47,7 @@ Answer (end with Source: <document name>):
 def build_rag_chain(retriever, temperature: float = 0):
     """
     Build a RetrievalQA chain using FREE Groq LLM.
-    Model: llama-3.1-70b-versatile — better than GPT-3.5, completely free.
+    Model: openai/gpt-oss-120b — Groq's current recommended replacement for the deprecated Llama 3.3 70B, completely free.
     """
     groq_key = os.getenv("GROQ_API_KEY")
     if not groq_key:
@@ -57,7 +57,7 @@ def build_rag_chain(retriever, temperature: float = 0):
         )
 
     llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         temperature=temperature,
         groq_api_key=groq_key
     )
@@ -75,7 +75,7 @@ def build_rag_chain(retriever, temperature: float = 0):
         chain_type_kwargs={"prompt": prompt}
     )
 
-    log.info("RAG chain built — model: llama-3.1-70b-versatile (Groq)")
+    log.info("RAG chain built — model: openai/gpt-oss-120b (Groq)")
     return chain
 
 
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     ]
 
     print("\n" + "=" * 60)
-    print("Testing RAG chain with Groq (Llama 3.1 70B) + hybrid")
+    print("Testing RAG chain with Groq (GPT-OSS 120B) + hybrid")
     print("=" * 60)
 
     retriever = get_retriever("hybrid", k=5)
