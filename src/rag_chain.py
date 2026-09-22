@@ -14,15 +14,61 @@ Usage:
 """
 
 import os
+import time
 import logging
 from dotenv import load_dotenv
 
 from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
+from langchain_core.callbacks import BaseCallbackHandler
 
 load_dotenv()
 log = logging.getLogger(__name__)
+
+
+# ── Metrics callback: latency + token usage ────────────────────────
+class MetricsCallback(BaseCallbackHandler):
+    """
+    Captures, per chain.invoke() call:
+      - retrieval_time_s : wall-clock time spent in the top-level retriever
+                           (parent_run_id is None -> ignores nested sub-
+                           retriever calls inside EnsembleRetriever /
+                           ContextualCompressionRetriever)
+      - llm_time_s       : wall-clock time spent in the LLM generation call
+      - prompt_tokens / completion_tokens / total_tokens : from Groq's
+        OpenAI-compatible usage stats on the LLM response
+    """
+    def __init__(self):
+        self._retrieval_t0 = None
+        self._llm_t0 = None
+        self.retrieval_time_s = None
+        self.llm_time_s = None
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
+
+    def on_retriever_start(self, serialized, query, *, run_id, parent_run_id=None, **kwargs):
+        if parent_run_id is None:
+            self._retrieval_t0 = time.perf_counter()
+
+    def on_retriever_end(self, documents, *, run_id, parent_run_id=None, **kwargs):
+        if parent_run_id is None and self._retrieval_t0 is not None:
+            self.retrieval_time_s = round(time.perf_counter() - self._retrieval_t0, 3)
+
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        self._llm_t0 = time.perf_counter()
+
+    def on_llm_end(self, response, **kwargs):
+        if self._llm_t0 is not None:
+            self.llm_time_s = round(time.perf_counter() - self._llm_t0, 3)
+        try:
+            usage = (response.llm_output or {}).get("token_usage", {})
+            self.prompt_tokens += usage.get("prompt_tokens", 0)
+            self.completion_tokens += usage.get("completion_tokens", 0)
+            self.total_tokens += usage.get("total_tokens", 0)
+        except Exception:
+            pass
 
 # ── Prompt Template ────────────────────────────────────────────────
 PROMPT_TEMPLATE = """
@@ -82,16 +128,27 @@ def build_rag_chain(retriever, temperature: float = 0):
 # ── Ask Helper ─────────────────────────────────────────────────────
 def ask(chain, question: str) -> dict:
     """
-    Ask a question and get a structured response.
+    Ask a question and get a structured response, including
+    performance metrics for that single call.
 
     Returns:
         {
-            "answer"   : str   — the LLM answer
-            "sources"  : list  — source URLs
-            "contexts" : list  — raw retrieved chunk texts
+            "answer"            : str   — the LLM answer
+            "sources"           : list  — source URLs
+            "contexts"          : list  — raw retrieved chunk texts
+            "total_time_s"      : float — full chain.invoke() wall time
+            "retrieval_time_s"  : float | None — time spent retrieving
+            "llm_time_s"        : float | None — time spent generating
+            "prompt_tokens"     : int
+            "completion_tokens" : int
+            "total_tokens"      : int
         }
     """
-    result = chain.invoke({"query": question})
+    metrics = MetricsCallback()
+
+    t0 = time.perf_counter()
+    result = chain.invoke({"query": question}, config={"callbacks": [metrics]})
+    total_time_s = round(time.perf_counter() - t0, 3)
 
     sources  = []
     contexts = []
@@ -103,9 +160,15 @@ def ask(chain, question: str) -> dict:
         contexts.append(doc.page_content)
 
     return {
-        "answer"   : result["result"],
-        "sources"  : sources,
-        "contexts" : contexts,
+        "answer"            : result["result"],
+        "sources"           : sources,
+        "contexts"          : contexts,
+        "total_time_s"      : total_time_s,
+        "retrieval_time_s"  : metrics.retrieval_time_s,
+        "llm_time_s"        : metrics.llm_time_s,
+        "prompt_tokens"     : metrics.prompt_tokens,
+        "completion_tokens" : metrics.completion_tokens,
+        "total_tokens"      : metrics.total_tokens,
     }
 
 
@@ -140,5 +203,11 @@ if __name__ == "__main__":
         print(f" Sources:")
         for s in result["sources"]:
             print(f"   - {s}")
+        print(f" ⏱  Total: {result['total_time_s']}s "
+              f"(retrieval: {result['retrieval_time_s']}s, "
+              f"llm: {result['llm_time_s']}s)")
+        print(f" 🔢 Tokens: {result['prompt_tokens']} prompt + "
+              f"{result['completion_tokens']} completion = "
+              f"{result['total_tokens']} total")
 
     print("\n RAG chain test complete — ready for Phase 3 evaluation!")

@@ -1,32 +1,82 @@
 """
-evaluate.py — Phase 3a: Local evaluation scoring (no OpenAI needed)
-Scores a RAG chain using 4 metrics calculated locally:
+evaluate.py — Phase 3a: REAL RAGAS evaluation (LLM-as-judge under the hood)
 
-  - faithfulness       : keyword overlap between answer and retrieved context
-  - answer_relevancy   : keyword overlap between answer and question
-  - context_recall     : overlap between retrieved context and ground truth
-  - context_precision  : how focused/relevant the retrieved chunks are
+Scores a RAG chain using the actual `ragas` library, not a hand-rolled
+keyword-overlap approximation:
 
-100% free — no API keys needed for scoring.
+  - faithfulness       : does the answer's claims actually follow from
+                          the retrieved context? (checked by an LLM judge
+                          that breaks the answer into individual claims)
+  - answer_relevancy    : does the answer actually address the question?
+                          (an LLM generates candidate questions from the
+                          answer, then compares their embeddings to the
+                          original question's embedding)
+  - context_recall      : does the retrieved context cover everything in
+                          the ground-truth answer? (LLM judge)
+  - context_precision    : are the retrieved chunks ranked with the most
+                          relevant ones first? (LLM judge)
+
+Uses your existing free stack — Groq LLM as the judge, HuggingFace
+MiniLM as the embedder — so no OpenAI key is required.
 
 Usage:
-    from evaluate import run_local_eval
-    scores = run_local_eval(qa_pairs, chain, "Dense (baseline)")
+    from evaluate import run_ragas_eval
+    summary = run_ragas_eval(qa_pairs, chain, "Dense (baseline)")
 """
 
-import re
+import os
 import json
 import logging
 from pathlib import Path
 
+from datasets import Dataset
+from dotenv import load_dotenv
+
+from ragas import evaluate
+from ragas.run_config import RunConfig
+from ragas.metrics import (
+    faithfulness,
+    answer_relevancy,
+    context_recall,
+    context_precision,
+)
+from ragas.llms import LangchainLLMWrapper
+from ragas.embeddings import LangchainEmbeddingsWrapper
+
+from langchain_groq import ChatGroq
+from langchain_community.embeddings import HuggingFaceEmbeddings
+
+load_dotenv()
 log = logging.getLogger(__name__)
 
 ROOT      = Path(__file__).resolve().parent.parent
 EVAL_PATH = ROOT / "data" / "eval" / "eval_dataset.json"
 
+# Full RAGAS metric set — all 4 pillars of RAG evaluation.
+ALL_METRICS  = [faithfulness, answer_relevancy, context_recall, context_precision]
+
+# Reduced set for use while the free-tier Groq quota is under heavy
+# contention — faithfulness (is the answer grounded in context?) and
+# answer_relevancy (does it address the question?) are the two most
+# commonly cited RAGAS metrics in interviews, and together they're
+# roughly half the LLM-judge call volume of the full 4-metric set.
+LIGHT_METRICS = [faithfulness, answer_relevancy]
+
+# Even lighter — just faithfulness. Across tonight's runs on the free
+# tier, faithfulness has consistently returned real scores while
+# answer_relevancy keeps timing out (it needs more sub-calls per
+# question: generating several candidate questions from the answer,
+# then embedding them — more chances to hit a 429 mid-way through).
+# Use this when even LIGHT_METRICS is too much for current API load.
+MINIMAL_METRICS = [faithfulness]
+
+# Change this to LIGHT_METRICS or ALL_METRICS once your Groq quota has
+# more headroom (e.g. on the Developer tier, or a quieter time of day).
+METRICS = MINIMAL_METRICS
+
 
 def load_eval_dataset() -> list[dict]:
-    """Load the 25 QA pairs from eval_dataset.json"""
+    """Load the QA pairs from eval_dataset.json"""
     if not EVAL_PATH.exists():
         raise FileNotFoundError(f"eval_dataset.json not found at {EVAL_PATH}")
     pairs = json.loads(EVAL_PATH.read_text(encoding="utf-8"))
@@ -34,151 +84,131 @@ def load_eval_dataset() -> list[dict]:
     return pairs
 
 
-# ── Local scoring helpers ──────────────────────────────────────────
-
-def _tokenize(text: str) -> set:
-    """Lowercase + split into word tokens, remove stopwords."""
-    stopwords = {
-        "a","an","the","is","it","in","of","to","and","or","for",
-        "with","on","at","by","this","that","are","was","be","as",
-        "from","has","have","had","not","but","what","which","who",
-        "how","when","where","does","do","did","can","will","its",
-        "their","they","we","you","i","me","my","your","our","been"
-    }
-    words = re.findall(r'\b[a-z][a-z0-9]*\b', text.lower())
-    return set(w for w in words if w not in stopwords and len(w) > 2)
-
-
-def _overlap_score(text_a: str, text_b: str) -> float:
+def _get_ragas_judge():
     """
-    Jaccard-style overlap between two texts.
-    Score = shared words / total unique words
-    Range: 0.0 (no overlap) to 1.0 (identical)
+    RAGAS needs an LLM (to judge claims) and an embedding model (for
+    answer_relevancy's cosine-similarity check).
+
+    Deliberately uses a DIFFERENT Groq model than the main RAG chain
+    (which uses openai/gpt-oss-120b). Groq enforces rate limits
+    per-model, not just per-organization — so a shared model would
+    compete for the same token budget and hit 429s constantly.
+    qwen/qwen3.8-27b draws from its own separate quota AND, being a
+    stronger model than gpt-oss-20b, follows RAGAS's structured-output
+    prompts (claim extraction, question generation, attribution
+    classification) more reliably — gpt-oss-20b was silently failing
+    those and producing 0.0/nan scores instead of real evaluation.
     """
-    tokens_a = _tokenize(text_a)
-    tokens_b = _tokenize(text_b)
-    if not tokens_a or not tokens_b:
-        return 0.0
-    intersection = tokens_a & tokens_b
-    union        = tokens_a | tokens_b
-    return round(len(intersection) / len(union), 4)
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        raise ValueError(
+            "GROQ_API_KEY not found in .env file — RAGAS needs an LLM "
+            "judge to score faithfulness/relevancy/recall/precision."
+        )
+
+    judge_llm = ChatGroq(
+        model="qwen/qwen3.8-27b",
+        temperature=0,
+        groq_api_key=groq_key,
+    )
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"},
+    )
+    return LangchainLLMWrapper(judge_llm), LangchainEmbeddingsWrapper(embeddings)
 
 
-def score_single(
-    question: str,
-    answer: str,
-    contexts: list[str],
-    ground_truth: str,
-) -> dict:
-    """
-    Score one QA result on 4 local metrics.
-
-    faithfulness      : answer grounded in retrieved context?
-    answer_relevancy  : answer addresses the question?
-    context_recall    : context covers the ground truth?
-    context_precision : context is focused (not noisy)?
-    """
-    full_context = " ".join(contexts)
-
-    # Faithfulness: how much of the answer is in the context
-    faithfulness = _overlap_score(answer, full_context)
-
-    # Answer relevancy: how well answer addresses question
-    answer_relevancy = _overlap_score(answer, question)
-
-    # Context recall: how much of ground truth is in the context
-    context_recall = _overlap_score(full_context, ground_truth)
-
-    # Context precision: how relevant are chunks to the question
-    if contexts:
-        chunk_scores = [_overlap_score(c, question) for c in contexts]
-        context_precision = round(sum(chunk_scores) / len(chunk_scores), 4)
-    else:
-        context_precision = 0.0
-
-    return {
-        "faithfulness"      : faithfulness,
-        "answer_relevancy"  : answer_relevancy,
-        "context_recall"    : context_recall,
-        "context_precision" : context_precision,
-    }
-
-
-# ── Main eval runner ───────────────────────────────────────────────
-
-def run_local_eval(
+def run_ragas_eval(
     qa_pairs: list[dict],
     chain,
     strategy_name: str,
     max_questions: int = 10,
-) -> dict:
+):
     """
-    Run local evaluation on a RAG chain.
+    Run REAL RAGAS evaluation on a RAG chain.
 
     Args:
         qa_pairs      : list of {"question": str, "ground_truth": str}
         chain         : built RAG chain from rag_chain.py
         strategy_name : label (e.g. "Dense (baseline)")
-        max_questions : how many questions to score
+        max_questions : how many questions to score (each one costs
+                        several LLM-judge calls — keep this modest on
+                        a free-tier API key to avoid rate limits)
 
     Returns:
-        dict with strategy name and 4 mean scores
+        (summary_dict, per_question_dataframe)
     """
-    log.info(f"Running local eval — strategy: {strategy_name}")
-    log.info(f"Evaluating {max_questions}/{len(qa_pairs)} questions...")
+    log.info(f"Running RAGAS eval — strategy: {strategy_name}")
+    pairs = qa_pairs[:max_questions]
 
-    pairs   = qa_pairs[:max_questions]
-    all_scores = {
-        "faithfulness"      : [],
-        "answer_relevancy"  : [],
-        "context_recall"    : [],
-        "context_precision" : [],
-    }
+    questions, answers, contexts_list, ground_truths = [], [], [], []
     success = 0
 
     for i, pair in enumerate(pairs, 1):
         question     = pair["question"]
         ground_truth = pair["ground_truth"]
-
-        log.info(f"  [{i}/{max_questions}] {question[:65]}...")
-
+        log.info(f"  [{i}/{len(pairs)}] generating answer: {question[:60]}...")
         try:
             result   = chain.invoke({"query": question})
             answer   = result["result"]
             contexts = [d.page_content for d in result.get("source_documents", [])]
-
-            scores = score_single(question, answer, contexts, ground_truth)
-
-            for metric, val in scores.items():
-                all_scores[metric].append(val)
-
-            success += 1
-
         except Exception as e:
             log.warning(f"  Skipped question {i}: {e}")
             continue
 
+        questions.append(question)
+        answers.append(answer)
+        contexts_list.append(contexts)
+        ground_truths.append(ground_truth)
+        success += 1
+
     if success == 0:
-        raise RuntimeError("No questions were evaluated successfully")
+        raise RuntimeError("No questions were answered successfully — nothing to score")
 
-    # Mean scores
-    summary = {
-        "strategy"          : strategy_name,
-        "faithfulness"      : round(sum(all_scores["faithfulness"]) / success, 4),
-        "answer_relevancy"  : round(sum(all_scores["answer_relevancy"]) / success, 4),
-        "context_recall"    : round(sum(all_scores["context_recall"]) / success, 4),
-        "context_precision" : round(sum(all_scores["context_precision"]) / success, 4),
-        "questions_scored"  : success,
-    }
+    dataset = Dataset.from_dict({
+        "question"    : questions,
+        "answer"      : answers,
+        "contexts"    : contexts_list,
+        "ground_truth": ground_truths,
+    })
 
-    log.info(f"Results for {strategy_name}:")
-    log.info(f"  Faithfulness      : {summary['faithfulness']}")
-    log.info(f"  Answer Relevancy  : {summary['answer_relevancy']}")
-    log.info(f"  Context Recall    : {summary['context_recall']}")
-    log.info(f"  Context Precision : {summary['context_precision']}")
-    log.info(f"  Questions scored  : {success}/{max_questions}")
+    log.info(f"Scoring {success} answers with RAGAS (LLM-as-judge)...")
+    judge_llm, judge_embeddings = _get_ragas_judge()
 
-    return summary
+    # Groq's free tier caps tokens-per-minute (TPM) fairly low (e.g. 8000
+    # for openai/gpt-oss-120b). RAGAS defaults to firing up to 16 LLM
+    # calls concurrently, which blows past that limit almost instantly.
+    # max_workers=1 makes it fully sequential; max_wait/max_retries give
+    # it room to back off and retry instead of hard-failing on a 429.
+    safe_run_config = RunConfig(
+        max_workers=1,
+        max_wait=120,
+        max_retries=15,
+    )
+
+    ragas_result = evaluate(
+        dataset,
+        metrics=METRICS,
+        llm=judge_llm,
+        embeddings=judge_embeddings,
+        run_config=safe_run_config,
+    )
+
+    scores_df = ragas_result.to_pandas()
+
+    metric_cols = [m.name for m in METRICS]  # only columns that actually ran
+
+    summary = {"strategy": strategy_name}
+    for col in metric_cols:
+        summary[col] = round(float(scores_df[col].mean()), 4)
+    summary["questions_scored"] = success
+
+    log.info(f"RAGAS results for {strategy_name}:")
+    for col in metric_cols:
+        log.info(f"  {col:<18}: {summary[col]}")
+    log.info(f"  questions_scored : {success}/{len(pairs)}")
+
+    return summary, scores_df
 
 
 if __name__ == "__main__":
@@ -190,4 +220,5 @@ if __name__ == "__main__":
     pairs = load_eval_dataset()
     print(f"Eval dataset loaded: {len(pairs)} questions")
     print(f"Sample: {pairs[0]['question']}")
-    print("Local scoring ready — no API keys needed!")
+    print("Real RAGAS scoring ready — this will call your Groq + HF "
+          "embeddings, no OpenAI key needed.")

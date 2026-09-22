@@ -50,6 +50,8 @@ HF_TASKS = [
     "question-answering",
     "summarization",
     "fill-mask",
+    "translation",
+    "sentence-similarity",
 ]
 
 def fetch_hf_model_cards(
@@ -115,14 +117,27 @@ def fetch_hf_model_cards(
 # ══════════════════════════════════════════════════════════════════
 
 SKLEARN_PAGES = {
-    "ensemble"    : "https://scikit-learn.org/stable/modules/ensemble.html",
-    "svm"         : "https://scikit-learn.org/stable/modules/svm.html",
-    "tree"        : "https://scikit-learn.org/stable/modules/tree.html",
-    "linear_model": "https://scikit-learn.org/stable/modules/linear_model.html",
-    "clustering"  : "https://scikit-learn.org/stable/modules/clustering.html",
-    "neural_net"  : "https://scikit-learn.org/stable/modules/neural_networks_supervised.html",
-    "preprocessing": "https://scikit-learn.org/stable/modules/preprocessing.html",
-    "model_eval"  : "https://scikit-learn.org/stable/modules/model_evaluation.html",
+    "ensemble"          : "https://scikit-learn.org/stable/modules/ensemble.html",
+    "svm"               : "https://scikit-learn.org/stable/modules/svm.html",
+    "tree"              : "https://scikit-learn.org/stable/modules/tree.html",
+    "linear_model"      : "https://scikit-learn.org/stable/modules/linear_model.html",
+    "clustering"        : "https://scikit-learn.org/stable/modules/clustering.html",
+    "neural_net"        : "https://scikit-learn.org/stable/modules/neural_networks_supervised.html",
+    "preprocessing"     : "https://scikit-learn.org/stable/modules/preprocessing.html",
+    "model_eval"        : "https://scikit-learn.org/stable/modules/model_evaluation.html",
+    # ── Added for corpus scale-up ──────────────────────────────────
+    "naive_bayes"       : "https://scikit-learn.org/stable/modules/naive_bayes.html",
+    "neighbors"         : "https://scikit-learn.org/stable/modules/neighbors.html",
+    "cross_validation"  : "https://scikit-learn.org/stable/modules/cross_validation.html",
+    "grid_search"       : "https://scikit-learn.org/stable/modules/grid_search.html",
+    "feature_selection" : "https://scikit-learn.org/stable/modules/feature_selection.html",
+    "pipeline"          : "https://scikit-learn.org/stable/modules/compose.html",
+    "calibration"       : "https://scikit-learn.org/stable/modules/calibration.html",
+    "multiclass"        : "https://scikit-learn.org/stable/modules/multiclass.html",
+    "outlier_detection" : "https://scikit-learn.org/stable/modules/outlier_detection.html",
+    "decomposition"     : "https://scikit-learn.org/stable/modules/decomposition.html",
+    "manifold"          : "https://scikit-learn.org/stable/modules/manifold.html",
+    "gaussian_process"  : "https://scikit-learn.org/stable/modules/gaussian_process.html",
 }
 
 def _scrape_sklearn_page(name: str, url: str) -> Optional[Document]:
@@ -227,7 +242,7 @@ def load_chunks(path: Path) -> list[Document]:
 # ══════════════════════════════════════════════════════════════════
 
 def run_ingestion(
-    hf_limit: int = 10,
+    hf_limit: int = 30,
     chunk_size: int = 500,
     chunk_overlap: int = 100,
 ) -> list[Document]:
@@ -273,8 +288,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="ML Docs RAG — Phase 1 Ingestion")
-    parser.add_argument("--hf-limit",       type=int, default=10,
-                        help="Model cards per HF task (default: 10)")
+    parser.add_argument("--hf-limit",       type=int, default=30,
+                        help="Model cards per HF task (default: 30)")
     parser.add_argument("--chunk-size",     type=int, default=500,
                         help="Chunk size in characters (default: 500)")
     parser.add_argument("--chunk-overlap",  type=int, default=100,
