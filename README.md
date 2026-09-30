@@ -1,14 +1,14 @@
 # ML Documentation RAG System
-> Chat with ML documentation. Benchmark 3 retrieval strategies. Evaluate with RAGAS.
+> Chat with ML documentation. Benchmark 3 retrieval strategies. Evaluate with real RAGAS.
 
 ---
 
 ## What this project does
 
-- Ingests **HuggingFace model cards** + **Scikit-learn docs** into a vector store
+- Ingests **HuggingFace model cards** + **scikit-learn docs** into a vector store
 - Supports **3 retrieval strategies**: dense, hybrid BM25+dense, hybrid+reranking
-- Evaluates all 3 with **RAGAS** (faithfulness, answer relevancy, context recall, context precision)
-- Serves a **Streamlit app** with a Q&A chat interface + benchmark dashboard
+- Evaluates all 3 with **real RAGAS** (LLM-as-judge) — faithfulness, plus latency and token usage per call
+- Serves a **Streamlit chat app** with example questions, retrieval-strategy explanations, and a benchmark dashboard
 
 ---
 
@@ -16,25 +16,25 @@
 
 ```bash
 # 1. Clone and install
-git clone <your-repo>
+git clone https://github.com/Joswikkha/ml-docs-rag.git
 cd ml-docs-rag
 pip install -r requirements.txt
 
 # 2. Set your API keys
-cp .env.example .env
-# Edit .env with your OPENAI_API_KEY and COHERE_API_KEY
+cp env.example .env
+# Edit .env with your GROQ_API_KEY and COHERE_API_KEY (both free tier)
 
-# 3. Run Phase 1 — ingest documents
-python src/ingest.py --hf-limit 10
+# 3. Ingest documents
+python -m src.ingest
 
-# 4. Build vector store
-python src/vectorstore.py
+# 4. Build the vector store
+python -m src.vectorstore
 
-# 5. Run RAGAS benchmark
-python src/benchmark.py
+# 5. Run the RAGAS + latency/token benchmark
+python -m src.run_benchmark --max-questions 10
 
 # 6. Launch the app
-streamlit run app/streamlit_app.py
+streamlit run app.py
 ```
 
 ---
@@ -43,29 +43,24 @@ streamlit run app/streamlit_app.py
 
 ```
 ml-docs-rag/
-├── data/
-│   ├── raw/                    # downloaded docs
-│   ├── processed/
-│   │   ├── raw_docs.json       # parsed docs with metadata
-│   │   └── chunks.json         # chunked docs ready for embedding
-│   └── eval/
-│       └── eval_dataset.json   # 25 QA pairs for RAGAS
+├── app.py                      # Streamlit entry point
+├── pages/
+│   ├── 1_QA_Chat.py             # chat UI, example questions, strategy explainer
+│   └── 2_Benchmark_Dashboard.py # results dashboard
 ├── src/
-│   ├── ingest.py               # Phase 1: load, parse, chunk
-│   ├── vectorstore.py          # build & load ChromaDB index
-│   ├── retrievers.py           # 3 retrieval strategies
-│   ├── rag_chain.py            # LangChain QA chain
-│   ├── evaluate.py             # RAGAS scoring
-│   └── benchmark.py            # run all 3 strategies, save CSV
-├── app/
-│   ├── streamlit_app.py        # main entry point
-│   └── pages/
-│       ├── 1_QA_Chat.py
-│       └── 2_Benchmark_Dashboard.py
+│   ├── ingest.py                 # scrape + chunk HF model cards & sklearn docs
+│   ├── vectorstore.py             # MiniLM embeddings → ChromaDB
+│   ├── retrievers.py               # 3 retrieval strategies
+│   ├── rag_chain.py                 # Groq LLM chain + latency/token tracking
+│   ├── evaluate.py                   # real RAGAS scoring (LLM-as-judge)
+│   └── run_benchmark.py               # runs all strategies, writes results CSV
+├── data/
+│   ├── processed/                # chunked docs ready for embedding
+│   └── eval/eval_dataset.json    # 25 QA pairs for RAGAS
 ├── results/
-│   └── benchmark_results.csv  # RAGAS scores per strategy
+│   └── benchmark_results.csv     # RAGAS + latency + token results per strategy
 ├── requirements.txt
-├── .env.example
+├── env.example
 └── README.md
 ```
 
@@ -73,52 +68,47 @@ ml-docs-rag/
 
 ## RAGAS Benchmark Results
 
-| Strategy              | Faithfulness | Answer Relevancy | Context Recall | Context Precision |
-|-----------------------|:------------:|:----------------:|:--------------:|:-----------------:|
-| Dense (baseline)      | 0.71         | 0.74             | 0.68           | 0.72              |
-| Hybrid BM25+Dense     | 0.79         | 0.81             | 0.77           | 0.80              |
-| Hybrid + Reranking ⭐ | **0.87**     | **0.91**         | **0.85**       | **0.88**          |
+Real results from `python -m src.run_benchmark --max-questions 10`, 10 questions per strategy:
 
-> Hybrid + Reranking improves faithfulness by ~18% over the dense baseline.
+| Strategy              | Faithfulness | Avg Latency | Avg Tokens |
+|-----------------------|:------------:|:-----------:|:----------:|
+| Dense (baseline)      | 0.43         | 0.81s       | 933        |
+| Hybrid BM25+Dense     | 0.62         | 1.14s       | 1,407      |
+| Hybrid + Reranking ⭐ | **0.66**     | 1.46s       | 1,032      |
 
-## RAG Evaluation Results
+Faithfulness improves at each step — hybrid retrieval beats pure dense search, and adding
+a Cohere reranker on top improves it further, at the cost of a bit more latency.
 
-We evaluated three retrieval strategies using RAGAS.
-
-| Retrieval Strategy | RAGAS Score |
-|--------------------|-------------|
-| Dense Retrieval | 0.43 |
-| Hybrid Retrieval | 0.62 |
-| Hybrid + Reranking | 0.66 |
-
-### Evaluation Methodology
-
-We used real RAGAS evaluation with an independent
-LLM-as-judge (qwen3.8-27b), separate from the
-answer-generation model (gpt-oss-120b).
-
-Hybrid retrieval improved the score from 0.43 to 0.62.
-Adding reranking further increased the score to 0.66.
+**Note on scope:** faithfulness is currently the only RAGAS metric scored by default
+(`answer_relevancy`, `context_recall`, `context_precision` are implemented in
+`src/evaluate.py` but disabled by default — see `METRICS` in that file). This was a
+pragmatic call while developing against Groq's free-tier rate limits, where each
+additional metric multiplies the number of LLM-judge calls per question. Re-enabling
+them just means changing one line.
 
 ---
 
 ## Tech stack
 
-| Layer       | Library                                    |
-|-------------|---------------------------------------------|
-| LLM         | OpenAI GPT-4o-mini                          |
-| Embeddings  | OpenAI text-embedding-3-small               |
-| Vector DB   | ChromaDB (local)                            |
-| Retrieval   | LangChain + rank_bm25 + Cohere Rerank       |
-| Evaluation  | RAGAS                                       |
-| UI          | Streamlit + Plotly                          |
+| Layer       | Library / Model                              |
+|-------------|-----------------------------------------------|
+| LLM         | Groq — `openai/gpt-oss-120b` (free tier)      |
+| Judge LLM   | Groq — `qwen/qwen3.8-27b` (separate quota from the generator LLM) |
+| Embeddings  | `sentence-transformers/all-MiniLM-L6-v2` (local, free) |
+| Vector DB   | ChromaDB (local)                              |
+| Retrieval   | LangChain + `rank_bm25` + Cohere Rerank       |
+| Evaluation  | `ragas` (real LLM-as-judge, not keyword overlap) |
+| UI          | Streamlit                                     |
 
 ---
 
 ## Skills demonstrated
 
-- End-to-end RAG pipeline design
-- Multi-source document ingestion and metadata-aware chunking  
-- 3 retrieval strategy implementation and comparison
-- Quantitative evaluation with RAGAS metrics
-- Streamlit application development and deployment
+- End-to-end RAG pipeline design, entirely on free-tier APIs
+- Multi-source document ingestion and metadata-aware chunking
+- 3 retrieval strategy implementation and comparison (dense / hybrid / hybrid+rerank)
+- Real quantitative evaluation with RAGAS (LLM-as-judge), plus latency and token
+  instrumentation per call
+- Handling real-world API rate limits: separating judge/generator model quotas,
+  concurrency control, retry-with-backoff, and incremental result merging across runs
+- Streamlit application development and deployment (Streamlit Community Cloud)
