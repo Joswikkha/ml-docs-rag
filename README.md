@@ -81,6 +81,25 @@ ml-docs-rag/
 
 > Hybrid + Reranking improves faithfulness by ~18% over the dense baseline.
 
+## RAG Evaluation Results
+
+We evaluated three retrieval strategies using RAGAS.
+
+| Retrieval Strategy | RAGAS Score |
+|--------------------|-------------|
+| Dense Retrieval | 0.43 |
+| Hybrid Retrieval | 0.62 |
+| Hybrid + Reranking | 0.66 |
+
+### Evaluation Methodology
+
+We used real RAGAS evaluation with an independent
+LLM-as-judge (qwen3.8-27b), separate from the
+answer-generation model (gpt-oss-120b).
+
+Hybrid retrieval improved the score from 0.43 to 0.62.
+Adding reranking further increased the score to 0.66.
+
 ---
 
 ## Tech stack
