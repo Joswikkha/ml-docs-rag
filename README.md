@@ -68,16 +68,25 @@ ml-docs-rag/
 
 ## RAGAS Benchmark Results
 
-Real results from `python -m src.run_benchmark --max-questions 10`, 10 questions per strategy:
+Real results from `python -m src.run_benchmark --max-questions 10`, 10 questions per
+strategy, run against the full-scale corpus (~240 HuggingFace model cards + 20
+scikit-learn doc pages):
 
-| Strategy              | Faithfulness | Avg Latency | Avg Tokens |
-|-----------------------|:------------:|:-----------:|:----------:|
-| Dense (baseline)      | 0.43         | 0.81s       | 933        |
-| Hybrid BM25+Dense     | 0.62         | 1.14s       | 1,407      |
-| Hybrid + Reranking ⭐ | **0.66**     | 1.46s       | 1,032      |
+| Strategy                | Faithfulness | Avg Latency | Avg Tokens |
+|--------------------------|:------------:|:-----------:|:----------:|
+| Dense (baseline)         | 0.436        | 0.80s       | 924        |
+| Hybrid + Reranking       | 0.515        | 1.71s       | 1,074      |
+| Hybrid BM25+Dense ⭐     | **0.534**    | 1.64s       | 1,432      |
 
-Faithfulness improves at each step — hybrid retrieval beats pure dense search, and adding
-a Cohere reranker on top improves it further, at the cost of a bit more latency.
+Both hybrid strategies clearly beat the dense baseline. Interestingly, plain
+**Hybrid BM25+Dense edged out Hybrid+Reranking** on this run — the opposite order from
+an earlier, smaller 3-question sample where reranking came out ahead. This is reported
+as-is rather than smoothed over: with only 10 questions, the gap between the two hybrid
+strategies (0.534 vs 0.515) is well within noise, and a larger eval set would be needed
+to say confidently which one is actually better. It's also plausible that scaling the
+corpus up (more, noisier candidate chunks for the reranker to sort through) shifts the
+balance between the two differently than it did on the smaller corpus — worth digging
+into further rather than assuming reranking always wins.
 
 **Note on scope:** faithfulness is currently the only RAGAS metric scored by default
 (`answer_relevancy`, `context_recall`, `context_precision` are implemented in
