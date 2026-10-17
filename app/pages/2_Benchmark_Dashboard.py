@@ -27,8 +27,12 @@ if df is None:
     st.error("No results found at results/benchmark_results.csv")
     st.stop()
 
-# Keep only the most recent row per strategy — repeated incremental
-# benchmark runs can leave duplicate/stale rows in the CSV
+# Only use metrics that actually exist in this CSV
+METRICS = [m for m in ALL_POSSIBLE_METRICS if m in df.columns]
+if not METRICS:
+    st.error("No recognized metric columns found in benchmark_results.csv")
+    st.stop()
+
 # Keep the most COMPLETE row per strategy (fewest missing metric values).
 # Some earlier benchmark runs errored out partway (Groq rate limits) and
 # left rows with empty metrics — a plain "keep last" could pick one of
@@ -40,12 +44,6 @@ df = (
       .drop(columns="_completeness")
       .reset_index(drop=True)
 )
-
-# Only use metrics that actually exist in this CSV
-METRICS = [m for m in ALL_POSSIBLE_METRICS if m in df.columns]
-if not METRICS:
-    st.error("No recognized metric columns found in benchmark_results.csv")
-    st.stop()
 
 headline = METRICS[0]
 st.caption(f"Local scoring · {len(df)} strategies · metrics: {', '.join(METRICS)}")
