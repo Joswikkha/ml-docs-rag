@@ -15,38 +15,38 @@ STRATEGY_COL = "strategy"
 ALL_POSSIBLE_METRICS = ["faithfulness", "answer_relevancy", "context_recall", "context_precision"]
 
 @st.cache_data
-def load_results():
+def load_raw_results():
     path = os.path.join(ROOT, "results", "benchmark_results.csv")
     if not os.path.exists(path):
         return None
     return pd.read_csv(path)
 
-df = load_results()
+raw = load_raw_results()
 
-if df is None:
+if raw is None or STRATEGY_COL not in raw.columns:
     st.error("No results found at results/benchmark_results.csv")
     st.stop()
 
-# Only use metrics that actually exist in this CSV
-METRICS = [m for m in ALL_POSSIBLE_METRICS if m in df.columns]
+# This CSV has ONE ROW PER QUESTION (per strategy), not one row per
+# strategy — so we average the numeric metric columns across all
+# questions for each strategy to get the real per-strategy scores.
+METRICS = [m for m in ALL_POSSIBLE_METRICS if m in raw.columns and raw[m].notna().any()]
 if not METRICS:
     st.error("No recognized metric columns found in benchmark_results.csv")
     st.stop()
 
-# Keep the most COMPLETE row per strategy (fewest missing metric values).
-# Some earlier benchmark runs errored out partway (Groq rate limits) and
-# left rows with empty metrics — a plain "keep last" could pick one of
-# those over an earlier run that actually finished successfully.
-df["_completeness"] = df[METRICS].notna().sum(axis=1)
-df = (
-    df.sort_values("_completeness")
-      .drop_duplicates(subset=STRATEGY_COL, keep="last")
-      .drop(columns="_completeness")
-      .reset_index(drop=True)
-)
+agg = {m: "mean" for m in METRICS}
+df = raw.groupby(STRATEGY_COL, as_index=False).agg(agg)
+counts = raw.groupby(STRATEGY_COL)[METRICS[0]].apply(lambda s: s.notna().sum()).reset_index(name="questions_scored")
+df = df.merge(counts, on=STRATEGY_COL)
+
+# Order strategies: Dense first, then Hybrid, then Hybrid+Reranking, if present
+preferred_order = ["Dense (baseline)", "Hybrid BM25+Dense", "Hybrid + Reranking"]
+df["_order"] = df[STRATEGY_COL].apply(lambda s: preferred_order.index(s) if s in preferred_order else 99)
+df = df.sort_values("_order").drop(columns="_order").reset_index(drop=True)
 
 headline = METRICS[0]
-st.caption(f"Local scoring · {len(df)} strategies · metrics: {', '.join(METRICS)}")
+st.caption(f"Averaged over questions · {len(df)} strategies · metrics: {', '.join(METRICS)}")
 
 # ── KPI cards ──────────────────────────────────────────────────────
 st.subheader(f"{headline.replace('_', ' ').title()} — headline metric (higher = better)")
@@ -55,7 +55,7 @@ baseline = df.iloc[0][headline]
 for i, row in df.iterrows():
     delta = (row[headline] - baseline) / max(baseline, 0.0001) * 100
     cols[i].metric(
-        label=row[STRATEGY_COL],
+        label=f"{row[STRATEGY_COL]} ({int(row['questions_scored'])}q)",
         value=f"{row[headline]:.4f}",
         delta=f"{delta:+.1f}% vs baseline" if i > 0 else "baseline"
     )
@@ -112,9 +112,9 @@ with col2:
 
 # ── Full summary table ─────────────────────────────────────────────
 st.subheader("Full results table")
-display = df.set_index(STRATEGY_COL)[METRICS]
+display = df.set_index(STRATEGY_COL)[METRICS + ["questions_scored"]]
 st.dataframe(
-    display.style.format("{:.4f}").highlight_max(axis=0, color="#1a3a2a").highlight_min(axis=0, color="#3a1a1a"),
+    display.style.format({m: "{:.4f}" for m in METRICS}).highlight_max(axis=0, subset=METRICS, color="#1a3a2a").highlight_min(axis=0, subset=METRICS, color="#3a1a1a"),
     use_container_width=True
 )
 

@@ -68,32 +68,32 @@ ml-docs-rag/
 
 ## RAGAS Benchmark Results
 
-Real results from `python -m src.run_benchmark --max-questions 10`, 10 questions per
-strategy, run against the full-scale corpus (~240 HuggingFace model cards + 20
-scikit-learn doc pages):
+## RAGAS Benchmark Results
 
-| Strategy                | Faithfulness | Avg Latency | Avg Tokens |
-|--------------------------|:------------:|:-----------:|:----------:|
-| Dense (baseline)         | 0.436        | 0.80s       | 924        |
-| Hybrid + Reranking       | 0.515        | 1.71s       | 1,074      |
-| Hybrid BM25+Dense ⭐     | **0.534**    | 1.64s       | 1,432      |
+Real results from `python -m src.run_benchmark --max-questions 10`, averaged across all
+accumulated per-question runs against the full-scale corpus (~240 HuggingFace model cards
++ 20 scikit-learn doc pages):
 
-Both hybrid strategies clearly beat the dense baseline. Interestingly, plain
-**Hybrid BM25+Dense edged out Hybrid+Reranking** on this run — the opposite order from
-an earlier, smaller 3-question sample where reranking came out ahead. This is reported
-as-is rather than smoothed over: with only 10 questions, the gap between the two hybrid
-strategies (0.534 vs 0.515) is well within noise, and a larger eval set would be needed
-to say confidently which one is actually better. It's also plausible that scaling the
-corpus up (more, noisier candidate chunks for the reranker to sort through) shifts the
-balance between the two differently than it did on the smaller corpus — worth digging
-into further rather than assuming reranking always wins.
+| Strategy                  | Faithfulness | Questions Scored | Avg Latency | Avg Tokens |
+|----------------------------|:------------:|:-----------------:|:-----------:|:----------:|
+| Dense (baseline)           | 0.4361       | 10/10              | 0.80s       | 924        |
+| Hybrid BM25+Dense          | 0.4125       | 8/10               | 1.27s       | 1,436      |
+| Hybrid + Reranking ⭐      | **0.6005**   | 8/10               | 1.32s       | 1,078      |
 
-**Note on scope:** faithfulness is currently the only RAGAS metric scored by default
+Hybrid + Reranking clearly wins on this run (+37.7% over the dense baseline), while plain
+Hybrid BM25+Dense actually comes in slightly below baseline (-5.4%). This is a change from
+an earlier, smaller sample where plain hybrid retrieval edged out reranking — a reminder
+that with only 8-10 questions scored per strategy (some runs lost a question or two to
+Groq free-tier rate limits), these numbers carry real sampling noise. A larger, more stable
+eval set (ideally with retries that guarantee all N questions get scored) would be needed to
+say confidently which hybrid approach performs better in general.
+
+**Note on scope:** `faithfulness` is currently the only RAGAS metric scored by default
 (`answer_relevancy`, `context_recall`, `context_precision` are implemented in
 `src/evaluate.py` but disabled by default — see `METRICS` in that file). This was a
-pragmatic call while developing against Groq's free-tier rate limits, where each
-additional metric multiplies the number of LLM-judge calls per question. Re-enabling
-them just means changing one line.
+pragmatic call while developing against Groq's free-tier rate limits, where each additional
+metric multiplies the number of LLM-judge calls per question. Re-enabling them just means
+changing one line. 
 
 ---
 
