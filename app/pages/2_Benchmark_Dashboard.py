@@ -29,7 +29,17 @@ if df is None:
 
 # Keep only the most recent row per strategy — repeated incremental
 # benchmark runs can leave duplicate/stale rows in the CSV
-df = df.drop_duplicates(subset=STRATEGY_COL, keep="last").reset_index(drop=True)
+# Keep the most COMPLETE row per strategy (fewest missing metric values).
+# Some earlier benchmark runs errored out partway (Groq rate limits) and
+# left rows with empty metrics — a plain "keep last" could pick one of
+# those over an earlier run that actually finished successfully.
+df["_completeness"] = df[METRICS].notna().sum(axis=1)
+df = (
+    df.sort_values("_completeness")
+      .drop_duplicates(subset=STRATEGY_COL, keep="last")
+      .drop(columns="_completeness")
+      .reset_index(drop=True)
+)
 
 # Only use metrics that actually exist in this CSV
 METRICS = [m for m in ALL_POSSIBLE_METRICS if m in df.columns]
