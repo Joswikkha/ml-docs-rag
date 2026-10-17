@@ -7,7 +7,7 @@ st.set_page_config(
 )
 
 st.title("🔍 ML Documentation RAG System")
-st.subheader("Retrieval Strategy Benchmarking")
+st.subheader("Retrieval Strategy Benchmarking — MSc Data Science Project")
 
 st.markdown("""
 This system benchmarks **3 retrieval strategies** on ML documentation
